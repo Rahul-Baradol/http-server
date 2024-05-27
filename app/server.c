@@ -53,8 +53,28 @@ int main() {
 	int client_id = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
 	printf("Client connected\n");
 	
-	char response[] = "HTTP/1.1 200 OK\r\n\r\n";
-	send(client_id, response, sizeof(response), 0); 
+	while (1) {
+		char buffer[1024] = {};
+		ssize_t size = recv(client_id, buffer, 1024, 0);
+		if (size <= 0) {
+			printf("Invalid request\n");
+			continue;
+		}
+
+		int result = strncmp(buffer, "GET ", 4);
+		if (result != 0) {
+			printf("Invalid request\n");
+			break;
+		}
+
+		if (buffer[4] == '/' && buffer[5] == ' ') {
+			write(client_id, "HTTP/1.1 200 OK\r\n\r\n", 19);
+			break;
+		}
+
+		write(client_id, "HTTP/1.1 404 Not Found\r\n\r\n", 26);
+		break;
+	}
 
 	close(client_id);
 	close(server_fd);
