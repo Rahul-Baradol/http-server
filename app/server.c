@@ -7,6 +7,8 @@
 #include <errno.h>
 #include <unistd.h>
 
+char *get_path(char *request);
+
 int main() {
 	// Disable output buffering
 	setbuf(stdout, NULL);
@@ -54,25 +56,39 @@ int main() {
 	printf("Client connected\n");
 	
 	while (1) {
-		char buffer[1024] = {};
-		ssize_t size = recv(client_id, buffer, 1024, 0);
+		char request[1024] = {};
+		ssize_t size = recv(client_id, request, 1024, 0);
 		if (size <= 0) {
 			printf("Invalid request\n");
 			continue;
 		}
 
-		int result = strncmp(buffer, "GET ", 4);
-		if (result != 0) {
-			printf("Invalid request\n");
-			break;
+		char *path = get_path(request);
+
+		char *response = NULL;		
+		if (strcmp(path, "/") == 0) {
+			response = "HTTP/1.1 200 OK\r\n\r\n";
+		} else if (strncmp(path, "/echo/", 6) == 0) {
+			// /echo/abc
+			// 9 - 6 = 3
+			char *body = path + 6;
+			size_t contentLength = strlen(path) - 6;
+
+			char *format = "HTTP/1.1 200 OK\r\n" 
+							"Content-Type: text/plain\r\n" 
+							"Content-Length: %zu\r\n\r\n%s";
+
+			response = malloc(512);
+			sprintf(response, format, contentLength, body);
+			printf("%s\n", response);
+		} else {
+			response = "HTTP/1.1 404 Not Found\r\n\r\n";
 		}
 
-		if (buffer[4] == '/' && buffer[5] == ' ') {
-			write(client_id, "HTTP/1.1 200 OK\r\n\r\n", 19);
-			break;
+		int responseSize = strlen(response) + 1;
+		if (write(client_id, response, responseSize) != responseSize) {
+			printf("Unable to write to the socket");
 		}
-
-		write(client_id, "HTTP/1.1 404 Not Found\r\n\r\n", 26);
 		break;
 	}
 
@@ -80,4 +96,18 @@ int main() {
 	close(server_fd);
 
 	return 0;
+}
+
+char *get_path(char *request) {
+	// GET /echo/a HTTP/1.1
+	// 11 - 3 = 8
+	char *start = strchr(request, ' ');
+	char *end = strchr(start + 1, ' ');
+	int startPos = start - request;
+	int endPos = end - request;
+	int length = endPos - startPos - 1;
+	char *path = malloc(length);
+	memcpy(path, start + 1, length);
+	path[length] = '\0';
+	return path;
 }
