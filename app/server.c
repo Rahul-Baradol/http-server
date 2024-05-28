@@ -52,52 +52,58 @@ int main() {
 	
 	printf("Waiting for a client to connect...\n");
 	client_addr_len = sizeof(client_addr);
-	
-	int client_id = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
-	printf("Client connected\n");
-	
+		
+	int client_id;
+
 	while (1) {
-		char request[1024] = {};
-		ssize_t size = recv(client_id, request, 1024, 0);
-		if (size <= 0) {
-			printf("Invalid request\n");
-			continue;
+		client_id = accept(server_fd, (struct sockaddr *) &client_addr, &client_addr_len);
+		printf("Client connected\n");
+
+		int pid = fork();
+		if (pid == 0) {
+			break;
 		}
+	}
+	
+	char request[1024] = {};
+	ssize_t size = recv(client_id, request, 1024, 0);
+	if (size <= 0) {
+		printf("Invalid request\n");
+		return 0;
+	}
 
-		char *path = get_path(request);
+	char *path = get_path(request);
 
-		char *response = NULL;		
-		if (strcmp(path, "/") == 0) {
-			response = "HTTP/1.1 200 OK\r\n\r\n";
-		} else if (strncmp(path, "/echo/", 6) == 0) {
-			char *body = path + 6;
-			size_t contentLength = strlen(path) - 6;
+	char *response = NULL;		
+	if (strcmp(path, "/") == 0) {
+		response = "HTTP/1.1 200 OK\r\n\r\n";
+	} else if (strncmp(path, "/echo/", 6) == 0) {
+		char *body = path + 6;
+		size_t contentLength = strlen(path) - 6;
 
-			char *format = "HTTP/1.1 200 OK\r\n" 
-							"Content-Type: text/plain\r\n" 
-							"Content-Length: %zu\r\n\r\n%s";
+		char *format = "HTTP/1.1 200 OK\r\n" 
+						"Content-Type: text/plain\r\n" 
+						"Content-Length: %zu\r\n\r\n%s";
 
-			response = malloc(512);
-			sprintf(response, format, contentLength, body);
-		} else if (strncmp(path, "/user-agent", 11) == 0) {
-			char *user_agent = get_user_agent(request);
-			size_t contentLength = strlen(user_agent);
+		response = malloc(512);
+		sprintf(response, format, contentLength, body);
+	} else if (strncmp(path, "/user-agent", 11) == 0) {
+		char *user_agent = get_user_agent(request);
+		size_t contentLength = strlen(user_agent);
 
-			char *format = "HTTP/1.1 200 OK\r\n" 
-							"Content-Type: text/plain\r\n" 
-							"Content-Length: %zu\r\n\r\n%s";
+		char *format = "HTTP/1.1 200 OK\r\n" 
+						"Content-Type: text/plain\r\n" 
+						"Content-Length: %zu\r\n\r\n%s";
 
-			response = malloc(512);
-			sprintf(response, format, contentLength, user_agent);
-		} else {
-			response = "HTTP/1.1 404 Not Found\r\n\r\n";
-		}
+		response = malloc(512);
+		sprintf(response, format, contentLength, user_agent);
+	} else {
+		response = "HTTP/1.1 404 Not Found\r\n\r\n";
+	}
 
-		int responseSize = strlen(response);
-		if (write(client_id, response, responseSize) != responseSize) {
-			printf("Unable to write to the socket");
-		}
-		break;
+	int responseSize = strlen(response);
+	if (write(client_id, response, responseSize) != responseSize) {
+		printf("Unable to write to the socket");
 	}
 
 	close(client_id);
