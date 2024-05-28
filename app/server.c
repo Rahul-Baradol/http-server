@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 char *get_path(char *request);
+char *get_user_agent(char *request);
 
 int main() {
 	// Disable output buffering
@@ -69,8 +70,6 @@ int main() {
 		if (strcmp(path, "/") == 0) {
 			response = "HTTP/1.1 200 OK\r\n\r\n";
 		} else if (strncmp(path, "/echo/", 6) == 0) {
-			// /echo/abc
-			// 9 - 6 = 3
 			char *body = path + 6;
 			size_t contentLength = strlen(path) - 6;
 
@@ -80,12 +79,21 @@ int main() {
 
 			response = malloc(512);
 			sprintf(response, format, contentLength, body);
-			printf("%s\n", response);
+		} else if (strncmp(path, "/user-agent", 11) == 0) {
+			char *user_agent = get_user_agent(request);
+			size_t contentLength = strlen(user_agent);
+
+			char *format = "HTTP/1.1 200 OK\r\n" 
+							"Content-Type: text/plain\r\n" 
+							"Content-Length: %zu\r\n\r\n%s";
+
+			response = malloc(512);
+			sprintf(response, format, contentLength, user_agent);
 		} else {
 			response = "HTTP/1.1 404 Not Found\r\n\r\n";
 		}
 
-		int responseSize = strlen(response) + 1;
+		int responseSize = strlen(response);
 		if (write(client_id, response, responseSize) != responseSize) {
 			printf("Unable to write to the socket");
 		}
@@ -99,8 +107,6 @@ int main() {
 }
 
 char *get_path(char *request) {
-	// GET /echo/a HTTP/1.1
-	// 11 - 3 = 8
 	char *start = strchr(request, ' ');
 	char *end = strchr(start + 1, ' ');
 	int startPos = start - request;
@@ -110,4 +116,22 @@ char *get_path(char *request) {
 	memcpy(path, start + 1, length);
 	path[length] = '\0';
 	return path;
+}
+
+char *get_user_agent(char *request) {
+	char *start = request;
+	char *currentRequest = NULL;
+
+	for (int i = 0; i < 4; i++) {
+		currentRequest = start;
+		start = strchr(currentRequest, ' ') + 1;
+	}
+
+	char *end = strchr(start, '\r');
+	int length = end - start;
+
+	char *user_agent = malloc(length);
+	memcpy(user_agent, start, length);
+	user_agent[length] = '\0';
+	return user_agent;	
 }
