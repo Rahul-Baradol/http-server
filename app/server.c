@@ -9,6 +9,8 @@
 
 #define BUFFER_SIZE 4098
 
+char *get_request_body(char *request);
+char *get_method(char *request);
 char *get_path(char *request);
 char *get_user_agent(char *request);
 
@@ -79,57 +81,93 @@ int main(int argc, char **argv) {
 		return 0;
 	}
 
+	printf("%s", request);
+
+	char *method = get_method(request);
 	char *path = get_path(request);
 
-	char *response = NULL;		
-	if (strcmp(path, "/") == 0) {
-		response = "HTTP/1.1 200 OK\r\n\r\n";
-	} else if (strncmp(path, "/echo/", 6) == 0) {
-		char *body = path + 6;
-		size_t contentLength = strlen(path) - 6;
+	char *response = NULL;
 
-		char *format = "HTTP/1.1 200 OK\r\n" 
-						"Content-Type: text/plain\r\n" 
-						"Content-Length: %zu\r\n\r\n%s";
+	// printf("%s\n", method);
 
-		response = malloc(512);
-		sprintf(response, format, contentLength, body);
-	} else if (strncmp(path, "/user-agent", 11) == 0) {
-		char *user_agent = get_user_agent(request);
-		size_t contentLength = strlen(user_agent);
+	if (strcmp(method, "GET") == 0) {
+		if (strcmp(path, "/") == 0) {
+			response = "HTTP/1.1 200 OK\r\n\r\n";
+		} else if (strncmp(path, "/echo/", 6) == 0) {
+			char *body = path + 6;
+			size_t contentLength = strlen(path) - 6;
 
-		char *format = "HTTP/1.1 200 OK\r\n" 
-						"Content-Type: text/plain\r\n" 
-						"Content-Length: %zu\r\n\r\n%s";
+			char *format = "HTTP/1.1 200 OK\r\n" 
+							"Content-Type: text/plain\r\n" 
+							"Content-Length: %zu\r\n\r\n%s";
 
-		response = malloc(512);
-		sprintf(response, format, contentLength, user_agent);
- 	} else if (strncmp(path, "/files/", 7) == 0) {
- 		char *file = strchr(path + 1, '/');
+			response = malloc(512);
+			sprintf(response, format, contentLength, body);
+		} else if (strncmp(path, "/user-agent", 11) == 0) {
+			char *user_agent = get_user_agent(request);
+			size_t contentLength = strlen(user_agent);
 
- 		if (file != NULL) {
- 			char *filepath = strcat(directory, file);	
+			char *format = "HTTP/1.1 200 OK\r\n" 
+							"Content-Type: text/plain\r\n" 
+							"Content-Length: %zu\r\n\r\n%s";
 
- 			FILE *fd = fopen(filepath, "r");
+			response = malloc(512);
+			sprintf(response, format, contentLength, user_agent);
+	 	} else if (strncmp(path, "/files/", 7) == 0) {
+	 		char *file = strchr(path + 1, '/');
 
- 			if (fd != NULL) {
- 				char *buffer[BUFFER_SIZE] = {0};
- 				int bytes_read = fread(buffer, 1, BUFFER_SIZE, fd);
+	 		if (file != NULL) {
+	 			char *filepath = strcat(directory, file);	
 
- 				char *format = "HTTP/1.1 200 OK\r\n" 
-						"Content-Type: application/octet-stream\r\n" 
-						"Content-Length: %zu\r\n\r\n%s";
+	 			FILE *fd = fopen(filepath, "r");
 
- 				if (bytes_read > 0) {
- 					response = malloc(BUFFER_SIZE);
- 					sprintf(response, format, bytes_read, buffer);
- 				}
- 			} else {
- 				response = "HTTP/1.1 404 Not Found\r\n\r\n";
- 			}
- 		}
- 	} else {
-		response = "HTTP/1.1 404 Not Found\r\n\r\n";
+	 			if (fd != NULL) {
+	 				char *buffer[BUFFER_SIZE] = {0};
+	 				int bytes_read = fread(buffer, 1, BUFFER_SIZE, fd);
+
+	 				char *format = "HTTP/1.1 200 OK\r\n" 
+							"Content-Type: application/octet-stream\r\n" 
+							"Content-Length: %zu\r\n\r\n%s";
+
+	 				if (bytes_read > 0) {
+	 					response = malloc(BUFFER_SIZE);
+	 					sprintf(response, format, bytes_read, buffer);
+	 				}
+	 			} else {
+	 				response = "HTTP/1.1 404 Not Found\r\n\r\n";
+	 			}
+	 		} else {
+	 			response = "HTTP/1.1 400 Bad Request\r\n\r\n";
+	 		}
+	 	} else {
+			response = "HTTP/1.1 404 Not Found\r\n\r\n";
+		}
+	} else if (strcmp(method, "POST") == 0) {
+		if (strncmp(path, "/files/", 7) == 0) {
+			char *file = strchr(path + 1, '/');
+
+			char *body = get_request_body(request);
+
+	 		if (file != NULL) {
+	 			char *filepath = strcat(directory, file);	
+
+	 			FILE *fd = fopen(filepath, "w");
+
+	 			if (fd != NULL) {
+	 				int bytes_written = fwrite(body, sizeof(char), strlen(body), fd);
+
+	 				if (bytes_written > 0) {
+	 					response = "HTTP/1.1 201 Created\r\n\r\n";
+	 				} else {
+	 					response = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+	 				}
+	 			}
+	 		} else {
+	 			response = "HTTP/1.1 500 Internal Server Error\r\n\r\n";
+	 		}
+		} else {
+			response = "HTTP/1.1 404 Not Found\r\n\r\n";
+		}
 	}
 
 	int responseSize = strlen(response);
@@ -141,6 +179,27 @@ int main(int argc, char **argv) {
 	close(server_fd);
 
 	return 0;
+}
+
+char *get_request_body(char *request) {
+	char *start = request;
+	char *currentRequest = NULL;
+
+	for (int i = 0; i < 4; i++) {
+		currentRequest = start;
+		start = strchr(currentRequest, '\n') + 1;
+	}
+
+	return start;
+}
+
+char *get_method(char *request) {
+	char *end = strchr(request, ' ');
+	int length = end - request;
+	char *method = malloc(length);
+	memcpy(method, request, length);
+	method[length] = '\0';
+	return method;
 }
 
 char *get_path(char *request) {
