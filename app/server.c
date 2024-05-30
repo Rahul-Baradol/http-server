@@ -7,10 +7,17 @@
 #include <errno.h>
 #include <unistd.h>
 
+#define BUFFER_SIZE 4098
+
 char *get_path(char *request);
 char *get_user_agent(char *request);
 
-int main() {
+int main(int argc, char **argv) {
+	char *directory = NULL;
+	if (argc >= 2 && (strncmp(argv[1], "--directory", 11) == 0)) {
+		directory = argv[2];
+	}
+
 	// Disable output buffering
 	setbuf(stdout, NULL);
 
@@ -97,7 +104,31 @@ int main() {
 
 		response = malloc(512);
 		sprintf(response, format, contentLength, user_agent);
-	} else {
+ 	} else if (strncmp(path, "/files/", 7) == 0) {
+ 		char *file = strchr(path + 1, '/');
+
+ 		if (file != NULL) {
+ 			char *filepath = strcat(directory, file);	
+
+ 			FILE *fd = fopen(filepath, "r");
+
+ 			if (fd != NULL) {
+ 				char *buffer[BUFFER_SIZE] = {0};
+ 				int bytes_read = fread(buffer, 1, BUFFER_SIZE, fd);
+
+ 				char *format = "HTTP/1.1 200 OK\r\n" 
+						"Content-Type: application/octet-stream\r\n" 
+						"Content-Length: %zu\r\n\r\n%s";
+
+ 				if (bytes_read > 0) {
+ 					response = malloc(BUFFER_SIZE);
+ 					sprintf(response, format, bytes_read, buffer);
+ 				}
+ 			} else {
+ 				response = "HTTP/1.1 404 Not Found\r\n\r\n";
+ 			}
+ 		}
+ 	} else {
 		response = "HTTP/1.1 404 Not Found\r\n\r\n";
 	}
 
